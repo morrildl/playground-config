@@ -35,29 +35,29 @@ func LoadDirect(configFile string, dest interface{}) {
 	// validate config file input & load its contents if it looks good
 	if configFile == "" {
 		msg := "-config is required"
-		log.Error("config.init", msg)
+		log.Error("config.LoadDirect", msg)
 		panic(msg)
 	}
 	if configFile, err = filepath.Abs(configFile); err != nil {
-		msg := "-config value '"+configFile+"' does not resolve"
-		log.Error("config.init", msg)
+		msg := "-config value '" + configFile + "' does not resolve"
+		log.Error("config.LoadDirect", msg)
 		panic(msg)
 	}
 	if stat, err := os.Stat(configFile); (err != nil && !os.IsNotExist(err)) || (stat != nil && stat.IsDir()) {
-		msg := "-config value '"+configFile+"' does not stat or is a directory"
-		log.Error("config.init", msg, err)
+		msg := "-config value '" + configFile + "' does not stat or is a directory"
+		log.Error("config.LoadDirect", msg, err)
 		panic(msg)
 	}
 	file, err := os.Open(configFile)
 	if err != nil {
-		msg := "failure opening -config file '"+configFile+"'"
-		log.Error("config.init", msg, err)
+		msg := "failure opening -config file '" + configFile + "'"
+		log.Error("config.LoadDirect", msg, err)
 		panic(msg)
 	}
 	configContents, err := ioutil.ReadAll(file)
 	if err != nil {
-		msg := "failure reading -config file '"+configFile+"'"
-		log.Error("config.init", msg, err)
+		msg := "failure reading -config file '" + configFile + "'"
+		log.Error("config.LoadDirect", msg, err)
 		panic(msg)
 	}
 
@@ -72,19 +72,19 @@ func LoadDirect(configFile string, dest interface{}) {
 			for i, line := range lines {
 				if target <= (seen + len(line) + 1) { // assume ASCII
 					fmt.Println(line)
-					msg := "JSON parse error at line "+strconv.Itoa(i+1)+", column "+strconv.Itoa(target-seen)
-					log.Error("config.init", msg)
+					msg := "JSON parse error at line " + strconv.Itoa(i+1) + ", column " + strconv.Itoa(target-seen)
+					log.Error("config.LoadDirect", msg)
 					panic(msg)
 				}
 				seen += len(line) + 1
 			}
 		}
 		msg := "loading config failed on unmarshal "
-		log.Error("config.init", msg, err)
+		log.Error("config.LoadDirect", msg, err)
 		panic(msg)
 	}
 
-	log.Status("config.init", "Config loaded from '"+configFile+"'.")
+	log.Status("config.LoadDirect", "Config loaded from '"+configFile+"'.")
 }
 
 func init() {
