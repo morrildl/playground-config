@@ -16,11 +16,13 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -36,7 +38,101 @@ var configPath string
  * objects of all modules it wants to load; passing such an instance will load the JSON config data
  * into the respective objects. */
 func Load(dest interface{}) {
-	LoadDirect(configPath, dest)
+	LOGTAG := "config.Load"
+
+	v := reflect.ValueOf(dest)
+
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	if v.Kind() != reflect.Struct {
+		err := errors.New("cannot load config into a non-struct type")
+		log.Error(LOGTAG, "bad config", err)
+		panic(err)
+	}
+
+	type flagHolder struct {
+		name    string
+		val     *reflect.Value
+		flagVal interface{}
+	}
+	flags := make(map[string]*flagHolder)
+
+	fields := v.NumField()
+	for i := 0; i < fields; i++ {
+		fv := v.Field(i)
+		tag := v.Type().Field(i).Tag.Get("config")
+		if tag != "" {
+			chunks := strings.SplitN(tag, ";", 2)
+			name := chunks[0]
+			desc := ""
+			if len(chunks) == 2 {
+				desc = chunks[1]
+			}
+			var val interface{}
+			switch fv.Kind() {
+			case reflect.Slice:
+				if fv.Type().Elem().Kind() == reflect.String {
+					val = flag.String(name, "", desc)
+				} else {
+					log.Warn(LOGTAG, "only arrays of strings are supported")
+				}
+			case reflect.String:
+				val = flag.String(name, "", desc)
+			case reflect.Int:
+				val = flag.Int(name, 0, desc)
+			case reflect.Bool:
+				val = flag.Bool(name, false, desc)
+			default:
+				val = nil
+			}
+			if val != nil {
+				flags[name] = &flagHolder{name, &fv, val}
+			}
+		}
+	}
+
+	flag.StringVar(&configPath, "config", "", "location of the configuration JSON")
+	flag.BoolVar(&Debug, "debug", false, "enable debug logging")
+	flag.Parse()
+
+	present := make(map[string]bool)
+	flag.Visit(func(flag *flag.Flag) {
+		present[flag.Name] = true
+	})
+
+	if configPath != "" {
+		LoadDirect(configPath, dest)
+	} else if flag.NFlag() == 0 {
+		log.Warn(LOGTAG, "neither -config nor other flags provided; running with defaults")
+	}
+
+	for name, holder := range flags {
+		if present[name] {
+			wrapped := reflect.ValueOf(holder.flagVal).Elem()
+			switch wrapped.Kind() {
+			case reflect.String:
+				if holder.val.Kind() == reflect.Slice {
+					if holder.val.Type().Elem().Kind() == reflect.String {
+						chunks := strings.Split(wrapped.String(), "~~")
+						if holder.val.CanSet() {
+							holder.val.Set(reflect.ValueOf(chunks))
+						}
+					}
+					continue
+				}
+
+				fallthrough
+			case reflect.Int:
+				fallthrough
+			case reflect.Bool:
+				if holder.val.CanSet() {
+					holder.val.Set(wrapped)
+				}
+			default:
+			}
+		}
+	}
 }
 
 /* LoadDirect is like Load, but loads from the specified config file, bypassing command line
@@ -97,11 +193,4 @@ func LoadDirect(configFile string, dest interface{}) {
 	}
 
 	log.Status("config.LoadDirect", "Config loaded from '"+configFile+"'.")
-}
-
-func init() {
-	flag.StringVar(&configPath, "config", "", "location of the configuration JSON")
-	flag.BoolVar(&Debug, "debug", false, "enable debug logging")
-
-	flag.Parse()
 }
